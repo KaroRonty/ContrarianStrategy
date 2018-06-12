@@ -47,3 +47,4 @@ returns_ts <- as.xts(returns_dates, order.by = returns_dates[,1])
 returns_ts$dates <- NULL
 returns_ts$dates_1y <- NULL
 storage.mode(returns_ts) <- "numeric"
+
