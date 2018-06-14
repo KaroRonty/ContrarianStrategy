@@ -1,9 +1,10 @@
+library(tidyverse) # replace_na function as a workaround
 library(dplyr) # formatting data
 library(Amelia) # missmap
 library(lubridate) # handling dates
 library(quantmod) # calculating monthly returns
 options(scipen = 1000000)
-ind <- read.csv("industrydata.csv", skip = 9, stringsAsFactors = F)
+ind <- read.csv("49_Industry_Portfolios_Daily.csv", skip = 9, stringsAsFactors = F)
 
 # Make dates into right format
 colnames(ind)[1] <- "dates"
@@ -48,3 +49,30 @@ returns_ts$dates <- NULL
 returns_ts$dates_1y <- NULL
 storage.mode(returns_ts) <- "numeric"
 
+# Replace NAs with to calculate monthly returns
+returns_ts <- replace_na(returns_ts, -99999)
+
+monthly_returns <- as.data.frame(matrix(nrow = 1102, ncol = ncol(returns_ts))) ## ADJUST
+for (i in 1:ncol(returns_ts)){
+    monthly_returns[,i] <- monthlyReturn(returns_ts[,i])
+}
+# Add back colnames and NAs
+colnames(monthly_returns) <- colnames(returns_ts)
+monthly_returns[monthly_returns == 0] <- NA
+returns_ts[returns_ts == -99999] <- NA
+
+# Add back dates & leading zeros for months
+year_month <- expand.grid(1:12,1926:2018)
+year_month <- year_month[-c(1:6),]
+year_month <- year_month[c(1:1102),] ## ADJUST
+year_month$Var1 <- as.character(year_month$Var1)
+year_month$Var1 <- ifelse(nchar(year_month$Var1) == 1, paste("0", year_month$Var1, sep = ""),
+year_month$Var1)
+rownames(monthly_returns) <- paste(year_month$Var2, year_month$Var1, sep = "-")
+
+# 1 indicates that monthly return is below zero
+below_zero <- ifelse(monthly_returns < 0, 1, 0)
+# Calculate streak lengths
+streaks <- apply(below_zero, 2, function(x) sequence(rle(x)$lengths))
+# Keep only negative streaks
+streaks <- below_zero * streaks
