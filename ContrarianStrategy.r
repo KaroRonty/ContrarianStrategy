@@ -4,22 +4,23 @@ library(Amelia) # missmap
 library(lubridate) # handling dates
 library(quantmod) # calculating monthly returns
 options(scipen = 1000000)
-ind <- read.csv("49_Industry_Portfolios_Daily.csv", skip = 9, stringsAsFactors = F)
+
+# Read the data & keep only needed rows (Average value weighted monthly returns)
+ind <- read.csv("49_Industry_Portfolios.CSV", skip = 11, stringsAsFactors = F)
+ind <- ind[1:first(grep("Average", ind$X))-1, ]
 
 # Make dates into right format
 colnames(ind)[1] <- "dates"
+ind$dates <- paste0(ind$dates, "01")
 ind$dates <- as.Date(ind$dates, "%Y%m%d")
 
-# Extract date
+# Extract dates into a vector
 dates <- ind$dates
 ind$dates <- NULL
 dates <- dates[1:which(is.na(dates))[1]-1]
 
-# Remove Rubbr & Paper because they contain blank periods in the middle
-ind <- ind %>% select (-c(Rubbr, Paper))
-
 # Show missing values
-#missmap(ind)
+missmap(ind) # zero missing values
 
 # Remove equal weighted returns and NAs & make daily returns into decimals
 ind <- ind[1:which(ind == "")[1]-1,]
