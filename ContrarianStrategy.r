@@ -1,13 +1,12 @@
 library(tidyverse) # replace_na function as a workaround
 library(dplyr) # formatting data
 library(Amelia) # missmap
-library(lubridate) # handling dates
-library(quantmod) # calculating monthly returns
+library(ggplot2) # plotting
 options(scipen = 1000000)
 
 # Read the data & keep only needed rows (Average value weighted monthly returns)
 ind <- read.csv("49_Industry_Portfolios.CSV", skip = 11, stringsAsFactors = F)
-ind <- ind[1:first(grep("Average", ind$X))-1, ]
+ind <- ind[1:first(grep("Average", ind$X)) - 1, ]
 
 # Make dates into right format
 colnames(ind)[1] <- "dates"
@@ -17,7 +16,6 @@ ind$dates <- as.Date(ind$dates, "%Y%m%d")
 # Extract dates into a vector & delete them from ind
 dates <- ind$dates
 ind$dates <- NULL
-
 
 # Remove NAs (-99.99) & make daily returns into decimals
 ind <- sapply(ind, as.numeric)
@@ -36,114 +34,109 @@ sector_returns <- apply(ind, 2, cumprod)
 # Add back NAs to their original positions
 sector_returns[NA_pos] <- NA
 
-# Attach dates to cumulative products
+# Attach dates to the cumulative products
 returns_dates <- as.data.frame(cbind(as.character(dates), sector_returns))
 names(returns_dates)[1] <- "dates"
 returns_dates$dates <- as.Date(returns_dates$dates)
 
-# Make a time series object to calculate monthly returns
+# Make a time series object to calculate down years
 returns_ts <- as.xts(returns_dates, order.by = returns_dates[,1])
 returns_ts$dates <- NULL
 storage.mode(returns_ts) <- "numeric"
-
-oneyear <- apply(returns_ts, 2, function(x) ifelse(lead(x, 12) / x < 1, 1, 0))
-
-twoyear <- apply(returns_ts, 2, function(x) ifelse(lead(x, 12) / x < 1,
-                                            ifelse(lead(x, 24) / lead(x, 12) < 1,
-                                                            1, 0), 0))
-
-threeyear <- apply(returns_ts, 2, function(x) ifelse(lead(x, 12) / x < 1,
-                                              ifelse(lead(x, 24) / lead(x, 12) < 1, 
-                                              ifelse(lead(x, 36) / lead(x, 24) < 1, 
-                                                             1, 0), 0), 0))
-
-fouryear <- apply(returns_ts, 2, function(x) ifelse(lead(x, 12) / x < 1,
-                                             ifelse(lead(x, 24) / lead(x, 12) < 1, 
-                                             ifelse(lead(x, 36) / lead(x, 24) < 1, 
-                                             ifelse(lead(x, 48) / lead(x, 36) < 1,
-                                                            1, 0), 0), 0), 0))
-
-fiveyear <- apply(returns_ts, 2, function(x) ifelse(lead(x, 12) / x < 1,
-                                             ifelse(lead(x, 24) / lead(x, 12) < 1, 
-                                             ifelse(lead(x, 36) / lead(x, 24) < 1, 
-                                             ifelse(lead(x, 48) / lead(x, 36) < 1,
-                                             ifelse(lead(x, 60) / lead(x, 48) < 1,
-                                                            1, 0), 0), 0), 0), 0))
-
-# Calculate monthly returns & turn into data frame for below zero calulation
-monthly_returns <- returns_ts / apply(returns_ts, 2, function(x) lag(x, 1))
-monthly_returns <- as.data.frame(monthly_returns)
-
-years_below_zero_1 <- apply(monthly_returns, 2, function(x) lead(x, 12)) / monthly_returns
-
-# 1 indicates that monthly return is below zero
-below_zero <- ifelse(monthly_returns < 1, 1, 0)
-# Calculate streak lengths
-streaks <- apply(below_zero, 2, function(x) sequence(rle(x)$lengths))
-# Keep only negative streaks
-streaks <- below_zero * streaks
-
-# Make a data frame for each amount of streaks
-for(i in 1:5){
-  assign(paste0("streaks_", i), 
-         # First row as NA to match the rows of returns_ts
-         rbind(rep(NA, 49), ifelse(streaks >= i, 1, NA)))
-}
-
 # Add ones to the start of the rows to calculate correctly
 returns_ts <- rbind(rep(1, 49), as.data.frame(returns_ts))
 
-# Make a data frame containing future i year returns
+# Calculate consecutive down years for each period
+down_years_1 <- apply(returns_ts, 2, function(x) ifelse(lead(x, 12) / x < 1, 1, 0))
+
+down_years_2 <- apply(returns_ts, 2, function(x) ifelse(lead(x, 12) / x < 1,
+                                                 ifelse(lead(x, 24) / lead(x, 12) < 1,
+                                                             1, 0), 0))
+down_years_3 <- apply(returns_ts, 2, function(x) ifelse(lead(x, 12) / x < 1,
+                                                 ifelse(lead(x, 24) / lead(x, 12) < 1, 
+                                                 ifelse(lead(x, 36) / lead(x, 24) < 1, 
+                                                             1, 0), 0), 0))
+down_years_4 <- apply(returns_ts, 2, function(x) ifelse(lead(x, 12) / x < 1,
+                                                 ifelse(lead(x, 24) / lead(x, 12) < 1, 
+                                                 ifelse(lead(x, 36) / lead(x, 24) < 1, 
+                                                 ifelse(lead(x, 48) / lead(x, 36) < 1,
+                                                             1, 0), 0), 0), 0))
+down_years_5 <- apply(returns_ts, 2, function(x) ifelse(lead(x, 12) / x < 1,
+                                                 ifelse(lead(x, 24) / lead(x, 12) < 1, 
+                                                 ifelse(lead(x, 36) / lead(x, 24) < 1, 
+                                                 ifelse(lead(x, 48) / lead(x, 36) < 1,
+                                                 ifelse(lead(x, 60) / lead(x, 48) < 1,
+                                                             1, 0), 0), 0), 0), 0))
+
+# Make data frames containing future i year returns
 for(i in 1:5){
-  assign(paste0("year_returns_", i),
+  assign(paste0("returns_", i),
          apply(returns_ts, 2, function(x) lead(x, 12 * i)) / returns_ts)
 }
 
-strategy_1_1 <- streaks_1 * year_returns_1
-strategy_1_1$return <- apply(strategy_1_1, 1, function(x) mean(x, na.rm = T))
-
-
-strategy_2_1 <- streaks_2 * year_returns_1
-strategy_2_1$return <- apply(strategy_2_1, 1, function(x) mean(x, na.rm = T))
-
-x <- expand.grid(1:5, 1:5)
-colnames(x) <- c("streaks", "returns")
-
-x <- as.data.frame(NA)
+# Calculate one year future returns
 for(i in 1:5){
-  for(j in 1:5){
-    x <- rbind(x, paste0("strategy_", j, "_", i))
-  }
+  assign(paste0("returns", i),
+         apply(returns_1, 2, function(x) lead(x, i * 12)) * get(paste0("down_years_", i)))
 }
-x <- as.data.frame(x[2:26, ])
-x <- cbind(x, expand.grid(1:5, 1:5))
-colnames(x) <- c("strategy", "streaks", "year_returns")
-# Unfactor
-x$strategy <- as.character(x$strategy)
 
+# Make data frames into a list, replace zeros with NAs
+returns_list <- list(returns1, returns2, returns3, returns4, returns5)
+returns_list <- lapply(returns_list, function(x) x <- as.data.frame(x))
+returns_list <- rapply(returns_list, function(x) ifelse(x == 0, NA, x), how = "replace")
+names(returns_list) <- c("r1", "r2", "r3", "r4", "r5")
+list2env(returns_list, .GlobalEnv)
+
+# Turn the returns into data frames containing only the yearly returns
 for(i in 1:5){
-  for(j in 1:5){
-    assign(x$strategy[i], get(paste0("streaks_", i)) * get(paste0("year_returns_", i)))
-  }
+  assign(paste0("r_vector_", i),
+         as.data.frame(apply(get(paste0("r", i)), 1, function(x) mean(x, na.rm = T))))
 }
 
+# Calculate index returns
+index <- apply(returns_ts, 2, function(x) lead(x, 12) / x)
+index_vector <- as.data.frame(apply(index, 1, function(x) mean(x, na.rm = T)))
 
-for(i in 1:nrow(x)){
-  assign(x$strategy[i], get(paste0("streaks_", 1)) * get(paste0("year_returns_", 1)))
+# Rename columns for easier handling
+colnames(r_vector_1) <- colnames(r_vector_2) <- colnames(r_vector_3) <-
+colnames(r_vector_4) <- colnames(r_vector_5) <- colnames(index_vector) <- "x"
+
+# Add index returns to years where the strategy wasn't invested
+handle_missing <- function(x){
+  x <- as.data.frame(x)
+  colnames(x) <- "x"
+  return(ifelse(is.na(x), index_vector$x, x$x))
+}
+for(i in 1:5){
+  assign(paste0("r_vector_", i), handle_missing(get(paste0("r_vector_", i))))
 }
 
+# Bind the index return and the strategies together into a single data frame
+strategy_vectors <- cbind(index_vector, r_vector_1, r_vector_2, r_vector_3, r_vector_4, r_vector_5)
+strategy_vectors <- as.data.frame(strategy_vectors)
+colnames(strategy_vectors) <- c("index", "r1", "r2", "r3", "r4", "r5")
 
-test <- apply(year_returns_1, 2, function(x) lead(x, 1))
-x <- test*streaks_5
-x <- as.data.frame(x)
-x$return <- apply(x, 1, function(x) mean(x, na.rm = T))
-geoMean(x$return, na.rm = T)
+############################################
+return_matrix <- matrix(nrow = 6, ncol = 4)
+############################################
 
-no_streaks <- matrix(nrow = nrow(streaks), ncol = ncol(streaks))
-no_streaks[] <- 1
-strategy_all <- no_streaks * year_returns_1
-z$return <- apply(z, 1, function(x) mean(x, na.rm = T))
-geoMean(z$return, na.rm = T)
+# Make a new data frame containing portfolios formed every June
+june <- strategy_vectors[seq(1, nrow(strategy_vectors), 12), ]
+# Calculate cumulative products for plotting
+june <- apply(june, 2, function(x) cumprod(x))
+june <- as.data.frame(june)
+# Add dates from rownames to a column for gather
+june$date <- rownames(june)
+june$date[1] <- "1926-06-01"
+# Gather the data for plotting
+june_formatted <- gather(june, strategy, index, -date)
+ggplot(june_formatted, aes(x = as.Date(date), y = index, color = strategy)) +
+  geom_line(size = 1.5) +
+  xlab("Date") +
+  scale_y_continuous(trans='log2') +
+  scale_color_manual(values=c("#000000", "#F8766D", "#7CAE00", "#00BFC4", "#C77CFF", "#D3D3D3"))
+
+
 
 
 
