@@ -2,6 +2,8 @@ library(tidyverse) # replace_na function as a workaround
 library(dplyr) # formatting data
 library(Amelia) # missmap
 library(ggplot2) # plotting
+library(lubridate) # handling dates
+library(PerformanceAnalytics) # Sharpe ratio and maximum drawdown
 options(scipen = 1000000)
 
 # Read the data & keep only needed rows (Average value weighted monthly returns)
@@ -117,35 +119,50 @@ strategy_vectors <- as.data.frame(strategy_vectors)
 colnames(strategy_vectors) <- c("index", "r1", "r2", "r3", "r4", "r5")
 
 ############################################
-return_matrix <- matrix(nrow = 6, ncol = 4)
+# Make a matrix containing strategy performance
+return_matrix <- as.data.frame(matrix(nrow = 6, ncol = 4))
+colnames(return_matrix) <- c("Geomean", "Return", "Alpha", "Observations")
+# Calculate returns for the index & each strategy
+return_matrix[1, 2] <- exp(mean(log(strategy_vectors$index), na.rm = T))
+for(i in 1:5){
+  x <- strategy_vectors[, i + 1]
+  return_matrix[i + 1, 2] <- exp(mean(log(x), na.rm = T))
+}
 ############################################
 
-# Make a new data frame containing portfolios formed every June
-june <- strategy_vectors[seq(1, nrow(strategy_vectors), 12), ]
-# Calculate cumulative products for plotting
-june <- apply(june, 2, function(x) cumprod(x))
-june <- as.data.frame(june)
-# Add dates from rownames to a column for gather
-june$date <- rownames(june)
-june$date[1] <- "1926-06-01"
-# Gather the data for plotting
-june_formatted <- gather(june, strategy, index, -date)
-ggplot(june_formatted, aes(x = as.Date(date), y = index, color = strategy)) +
-  geom_line(size = 1.5) +
-  xlab("Date") +
-  scale_y_continuous(trans = 'log2') +
-  scale_color_manual(values = c("#000000", "#F8766D", "#7CAE00", "#00BFC4", "#C77CFF", "#D3D3D3"))
-
-
-
-
-
-
-
-
-
-
-
+for(i in 1:12){
+  # Make a new data frame containing portfolios formed every month
+  x <- strategy_vectors[seq(i, nrow(strategy_vectors), 12), ]
+  rownames(x)[1] <- as.character(as.Date(rownames(x)[2]) - years(1))
+  
+  # Make the returns of each month into a time series object
+  temp <- as.zoo(x)
+  index(temp) <- as.Date(rownames(x))
+  temp <- na.omit(temp)
+  temp <- temp - 1
+  
+  # Plot the max drawdowns & store max drawdowns & Sharpes
+  print(chart.Drawdown(temp, main = paste0("Maximum drawdown ",
+                                           month.name[month(rownames(temp[1]))]),
+                 legend.loc = "bottomright"))
+  assign(paste0(month.abb[i], "_dd"), maxDrawdown(temp))
+  assign(paste0(month.abb[i], "_sharpe"), SharpeRatio.annualized(temp))
+  
+  # Calculate cumulative products for plotting the returns
+  x <- apply(x, 2, function(x) cumprod(x))
+  x <- as.data.frame(x)
+  # Add dates from rownames to a column for gather
+  x$date <- rownames(x)
+  # Gather the data for plotting
+  x_formatted <- gather(x, strategy, index, -date)
+  print(ggplot(x_formatted, aes(x = as.Date(date), y = index, color = strategy)) +
+          geom_line(size = 1.5) +
+          xlab("Date") +
+          ggtitle(month.name[month(as.Date(x$date[1]))]) +
+          scale_y_continuous(trans = 'log2') +
+          scale_color_manual(
+            values = c("#000000", "#F8766D", "#7CAE00", "#00BFC4", "#C77CFF", "#D3D3D3")))
+}
 
 
 
