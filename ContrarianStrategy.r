@@ -133,8 +133,8 @@ june_formatted <- gather(june, strategy, index, -date)
 ggplot(june_formatted, aes(x = as.Date(date), y = index, color = strategy)) +
   geom_line(size = 1.5) +
   xlab("Date") +
-  scale_y_continuous(trans='log2') +
-  scale_color_manual(values=c("#000000", "#F8766D", "#7CAE00", "#00BFC4", "#C77CFF", "#D3D3D3"))
+  scale_y_continuous(trans = 'log2') +
+  scale_color_manual(values = c("#000000", "#F8766D", "#7CAE00", "#00BFC4", "#C77CFF", "#D3D3D3"))
 
 
 
