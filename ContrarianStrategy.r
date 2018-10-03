@@ -71,10 +71,6 @@ down_years_5 <- apply(returns_ts, 2, function(x) ifelse(lead(x, 12) / x < 1,
                                                  ifelse(lead(x, 60) / lead(x, 48) < 1,
                                                              1, 0), 0), 0), 0), 0))
 
-
-#######
-
-
 # Calculate index returns
 index <- apply(returns_ts, 2, function(x) lead(x, 1) / x)
 index_vector <- as.data.frame(apply(index, 1, function(x) mean(x, na.rm = T)))
@@ -167,29 +163,98 @@ strategies_cumprod <- as.data.frame(strategies_cumprod)
 strategies_cumprod$Date <- rownames(strategies_cumprod)
 
 # Gather & plot
-strategies_formatted <- gather(strategies_cumprod, strategy, index, -Date)
-ggplot(strategies_formatted, aes(x = as.Date(Date), y = index, color = strategy)) +
-        geom_line(size = 1.5) +
-        ggtitle(paste0("Strategies")) +
-        scale_y_continuous(trans = 'log2')
+strategies_formatted <- gather(strategies_cumprod, Strategy, index, -Date)
+ggplot(strategies_formatted, aes(x = as.Date(Date), y = index, color = Strategy)) +
+        geom_line(size = 1) +
+        ggtitle(paste0("Strategies formed every month")) +
+        xlab("Date") +
+        scale_y_continuous(trans = 'log2') +
+        scale_color_manual(
+    values = c("#F8766D", "#F8766D", "#F8766D", "#F8766D", "#F8766D"
+               , "#7CAE00", "#7CAE00", "#7CAE00", "#7CAE00", "#7CAE00"
+               , "#00BFC4", "#00BFC4", "#00BFC4", "#00BFC4", "#00BFC4"
+               , "#C77CFF", "#C77CFF", "#C77CFF", "#C77CFF", "#C77CFF"
+               , "#D3D3D3", "#D3D3D3", "#D3D3D3", "#D3D3D3", "#D3D3D3", "#000000"))
+
+###############
+# Remove unnecessary first row
+returns_monthly <- tail(returns_monthly, -1)
+
+# Calculate yearly returns & top 10% of sectors
+momentum_ts <- apply(returns_ts, 2, function(x) lead(x, 12) / x)
+momentum_months <- t(apply(momentum_ts, 1, function(x) x > quantile(x, .9, na.rm = T)))
+
+# Keep only portfolios formed in January
+momentum_months[month(rownames(momentum_months)) != 1] <- NA
 
 
+# Make a temporary data frame sharing dimensions with momentum_ts
+temp <- as.data.frame(matrix(nrow = nrow(momentum_ts),
+                             ncol = ncol(momentum_ts)))
+colnames(temp) <- colnames(momentum_ts)
+rownames(temp) <- rownames(momentum_ts)
+# For every column
+for(c in 1:ncol(momentum_ts)){
+  # For every row
+  for(r in 1:I(nrow(momentum_ts) - 23)){
+    # Each January
+    if(!is.na(momentum_months[r, c])){
+      # Sectors that were top x percentage in returns the year before
+      if(momentum_months[r,c] == T){
+        temp[r:I(r + 11), c] <- returns_monthly[I(r + 12):I(r + 23), c]
+      }
+    }
+  }
+}
+# Delete months before the first January when the strategy wasn't invested
+temp <- temp[I(month(rownames(temp))[1] + 2):nrow(temp), ]
+# Mean return of each month
+momentum_returns <- apply(temp, 1, function(x) mean(x, na.rm = T))
+# Remove NAs from the latest years where the strategy wasn't invested
+momentum_returns <- momentum_returns[!is.na(momentum_returns)]
+# Join index and momentum strategy returns together
+returns_df <- inner_join(rownames_to_column(as.data.frame(index_vector)),
+                         rownames_to_column(as.data.frame(momentum_returns)))
+
+#####
+# Calculate yearly returns & bottom 10% of sectors
+contra_ts <- apply(returns_ts, 2, function(x) lead(x, 12) / x)
+contra_months <- t(apply(contra_ts, 1, function(x) x < quantile(x, .1, na.rm = T)))
+
+# Keep only portfolios formed in January
+contra_months[month(rownames(contra_months)) != 1] <- NA
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+# Make a temporary data frame sharing dimensions with contra_ts
+temp2 <- as.data.frame(matrix(nrow = nrow(contra_ts),
+                              ncol = ncol(contra_ts)))
+colnames(temp2) <- colnames(contra_ts)
+rownames(temp2) <- rownames(contra_ts)
+# For every column
+for(c in 1:ncol(contra_ts)){
+  # For every row
+  for(r in 1:I(nrow(contra_ts) - 23)){
+    # Each January
+    if(!is.na(contra_months[r, c])){
+      # Sectors that were top x percentage in returns the year before
+      if(contra_months[r,c] == T){
+        temp2[r:I(r + 11), c] <- returns_monthly[I(r + 12):I(r + 23), c]
+      }
+    }
+  }
+}
+# Delete months before the first January when the strategy wasn't invested
+temp2 <- temp2[I(month(rownames(temp2))[1] + 2):nrow(temp2), ]
+# Mean return of each month
+contra_returns <- apply(temp2, 1, function(x) mean(x, na.rm = T))
+# Remove NAs from the latest years where the strategy wasn't invested
+contra_returns <- contra_returns[!is.na(contra_returns)]
+# Join index and contra strategy returns together
+returns_df <- inner_join(rownames_to_column(as.data.frame(index_vector)),
+                         rownames_to_column(as.data.frame(momentum_returns)))
+returns_df <- inner_join(returns_df,
+                         rownames_to_column(as.data.frame(contra_returns)))
+returns_formatted <- gather(returns_df, strategy, index, -rowname)
 
 
 
