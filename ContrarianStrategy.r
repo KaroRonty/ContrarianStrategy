@@ -254,6 +254,7 @@ returns_df <- inner_join(rownames_to_column(as.data.frame(index_vector)),
                          rownames_to_column(as.data.frame(momentum_returns)))
 returns_df <- inner_join(returns_df,
                          rownames_to_column(as.data.frame(contra_returns)))
+# returns_df$x <- lead(returns_df$x, 12)
 returns_df[, 2:4] <- cumprod(returns_df[, 2:4])
 returns_formatted <- gather(returns_df, strategy, index, -rowname)
 
