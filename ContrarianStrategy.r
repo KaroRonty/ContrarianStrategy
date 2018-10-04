@@ -254,8 +254,15 @@ returns_df <- inner_join(rownames_to_column(as.data.frame(index_vector)),
                          rownames_to_column(as.data.frame(momentum_returns)))
 returns_df <- inner_join(returns_df,
                          rownames_to_column(as.data.frame(contra_returns)))
+returns_df[, 2:4] <- cumprod(returns_df[, 2:4])
 returns_formatted <- gather(returns_df, strategy, index, -rowname)
 
-
+ggplot(returns_formatted, aes(x = as.Date(rowname), y = index, color = strategy)) +
+  geom_line(size = 1) +
+  ggtitle(paste0("Momentum and contrarian strategies")) +
+  xlab("Date") +
+  scale_y_continuous(trans = 'log2') +
+  scale_color_manual(
+    values = c("#F8766D", "#7CAE00", "#000000"))
 
 
