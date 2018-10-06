@@ -85,7 +85,7 @@ handle_missing <- function(x){
 
 # Make a data frame containing monthly returns
 returns_monthly <- apply(returns_ts, 2, function(x) lead(x, 1) / x)
-rownames(returns_monthly)[1] <- as.character(as.Date(rownames(returns_monthly)[2]) - years(1))
+rownames(returns_monthly)[1] <- as.character(as.Date(rownames(returns_monthly)[2]) - months(1))
 
 # Calculate returns for every strategy
 for (year in 1:5){
@@ -106,7 +106,7 @@ for (year in 1:5){
         # If the sector has been down for year amount of years
         if(get(paste0("down_years_", year))[r, c] == T){
           # Put the next holding_period * 12 month returns in the data frame
-            temp[r:I(r + 12 * holding_period - 1), c] <-
+            temp[I(r + 11):I(r + 11 + 12 * holding_period - 1), c] <-
             returns_monthly[I(r + 12 * year):I(r + (12 * holding_period - 1 + 12 * year)), c]
           }
         }
@@ -123,8 +123,8 @@ for (year in 1:5){
 }
 
 # Make a data frame for containing returns, Sharpe ratio & max dd
-returns_holder <- as.data.frame(matrix(nrow = 5 * 5, ncol = 4))
-colnames(returns_holder) <- c("Strategy", "Return", "Sharpe", "Max DD")
+returns_holder <- as.data.frame(matrix(nrow = 5 * 5, ncol = 5))
+colnames(returns_holder) <- c("Strategy", "Return", "Sharpe", "Max DD", "Volatility")
 
 # Make a data frame for strategies & add index returns to it
 strategies_holder <- data.frame(matrix(nrow = nrow(returns_ts), ncol = 1))
@@ -145,7 +145,7 @@ for(i in 1:5){
 }
 
 # Delete last NA observation & make into decimals
-strategies_holder <- head(strategies_holder, -1)
+strategies_holder <- head(strategies_holder, - 1)
 strategies_holder_xts <- as.xts(strategies_holder - 1)
 
 # Add the index to returns_holder
@@ -156,6 +156,7 @@ returns_holder[1, 2] <- exp(mean(log(strategies_holder$index), na.rm = T)) ^ 12
 # Calculate Sharpe ratios & max drawdowns
 returns_holder$Sharpe <- t(unname(SharpeRatio.annualized(strategies_holder_xts, 0.02 / 12)))
 returns_holder$`Max DD` <- t(unname(maxDrawdown(strategies_holder_xts)))
+returns_holder$Volatility <- t(unname(StdDev.annualized(strategies_holder_xts)))
 
 # Make cumulative product calculation for plotting
 strategies_cumprod <- apply(strategies_holder, 2, cumprod)
@@ -177,11 +178,9 @@ ggplot(strategies_formatted, aes(x = as.Date(Date), y = index, color = Strategy)
                , "#D3D3D3", "#D3D3D3", "#D3D3D3", "#D3D3D3", "#D3D3D3", "#000000"))
 
 ###############
-# Remove unnecessary first row
-returns_monthly <- tail(returns_monthly, -1)
 
 # Calculate yearly returns & top 10% of sectors
-momentum_ts <- apply(returns_ts, 2, function(x) lead(x, 12) / x)
+momentum_ts <- apply(returns_ts, 2, function(x) lead(x, 10) / x)
 momentum_months <- t(apply(momentum_ts, 1, function(x) x > quantile(x, .9, na.rm = T)))
 
 # Keep only portfolios formed in January
@@ -201,29 +200,28 @@ for(c in 1:ncol(momentum_ts)){
     if(!is.na(momentum_months[r, c])){
       # Sectors that were top x percentage in returns the year before
       if(momentum_months[r,c] == T){
-        temp[r:I(r + 11), c] <- returns_monthly[I(r + 12):I(r + 23), c]
+        temp[I(r + 12):I(r + 23), c] <- returns_monthly[I(r + 12):I(r + 23), c]
       }
     }
   }
 }
 # Delete months before the first January when the strategy wasn't invested
-temp <- temp[I(month(rownames(temp))[1] + 2):nrow(temp), ]
+# temp <- temp[I(month(rownames(temp))[1] + 2):nrow(temp), ]
 # Mean return of each month
-momentum_returns <- apply(temp, 1, function(x) mean(x, na.rm = T))
+Winner <- apply(temp, 1, function(x) mean(x, na.rm = T))
 # Remove NAs from the latest years where the strategy wasn't invested
-momentum_returns <- momentum_returns[!is.na(momentum_returns)]
+Winner <- Winner[!is.na(Winner)]
 # Join index and momentum strategy returns together
 returns_df <- inner_join(rownames_to_column(as.data.frame(index_vector)),
-                         rownames_to_column(as.data.frame(momentum_returns)))
+                         rownames_to_column(as.data.frame(Winner)))
 
 #####
 # Calculate yearly returns & bottom 10% of sectors
-contra_ts <- apply(returns_ts, 2, function(x) lead(x, 12) / x)
+contra_ts <- apply(returns_ts, 2, function(x) lead(x, 36) / x)
 contra_months <- t(apply(contra_ts, 1, function(x) x < quantile(x, .1, na.rm = T)))
 
 # Keep only portfolios formed in January
 contra_months[month(rownames(contra_months)) != 1] <- NA
-
 
 # Make a temporary data frame sharing dimensions with contra_ts
 temp2 <- as.data.frame(matrix(nrow = nrow(contra_ts),
@@ -233,12 +231,12 @@ rownames(temp2) <- rownames(contra_ts)
 # For every column
 for(c in 1:ncol(contra_ts)){
   # For every row
-  for(r in 1:I(nrow(contra_ts) - 23)){
+  for(r in 1:I(nrow(contra_ts) - 46)){
     # Each January
     if(!is.na(contra_months[r, c])){
       # Sectors that were top x percentage in returns the year before
       if(contra_months[r,c] == T){
-        temp2[r:I(r + 11), c] <- returns_monthly[I(r + 12):I(r + 23), c]
+        temp2[I(r + 35):I(r + 46), c] <- returns_monthly[I(r + 35):I(r + 46), c]
       }
     }
   }
@@ -246,24 +244,45 @@ for(c in 1:ncol(contra_ts)){
 # Delete months before the first January when the strategy wasn't invested
 temp2 <- temp2[I(month(rownames(temp2))[1] + 2):nrow(temp2), ]
 # Mean return of each month
-contra_returns <- apply(temp2, 1, function(x) mean(x, na.rm = T))
+Loser <- apply(temp2, 1, function(x) mean(x, na.rm = T))
 # Remove NAs from the latest years where the strategy wasn't invested
-contra_returns <- contra_returns[!is.na(contra_returns)]
+Loser <- Loser[!is.na(Loser)]
 # Join index and contra strategy returns together
 returns_df <- inner_join(rownames_to_column(as.data.frame(index_vector)),
-                         rownames_to_column(as.data.frame(momentum_returns)))
+                         rownames_to_column(as.data.frame(Winner)))
 returns_df <- inner_join(returns_df,
-                         rownames_to_column(as.data.frame(contra_returns)))
-# returns_df$x <- lead(returns_df$x, 12)
-returns_df[, 2:4] <- cumprod(returns_df[, 2:4])
-returns_formatted <- gather(returns_df, strategy, index, -rowname)
+                         rownames_to_column(as.data.frame(Loser)))
+colnames(returns_df)[2] <- "Index"
+returns_cumprod <- cumprod(returns_df[, 2:4])
+returns_cumprod$date <- rownames(returns_df)
 
-ggplot(returns_formatted, aes(x = as.Date(rowname), y = index, color = strategy)) +
+returns_holder_mc <- as.data.frame(matrix(nrow = 3, ncol = 5))
+colnames(returns_holder_mc) <- c("Strategy", "Return", "Sharpe", "Max DD", "Volatility")
+returns_df <- column_to_rownames(returns_df)
+returns_holder_mc$Strategy <- colnames(returns_df)
+returns_xts <- as.xts(returns_df - 1)
+
+
+# Calculate returns,  Sharpe ratios, max drawdowns & volatility
+for(i in 1:3){
+  returns_holder_mc$Return[i] <- exp(mean(log(returns_df[,i]), na.rm = T)) ^ 12
+}
+returns_holder_mc$Sharpe <- t(unname(SharpeRatio.annualized(returns_xts, 0.02 / 12)))
+returns_holder_mc$`Max DD` <- t(unname(maxDrawdown(returns_xts)))
+returns_holder_mc$Volatility <- t(unname(StdDev.annualized(returns_xts)))
+
+returns_formatted <- gather(returns_cumprod, Strategy, index, -date)
+returns_formatted$Strategy <- factor(returns_formatted$Strategy,
+                                     levels = c("Winner", "Index", "Loser"))
+
+
+returns_cumprod$date <- rownames(returns_df)
+ggplot(returns_formatted, aes(x = as.Date(date), y = index, color = Strategy)) +
   geom_line(size = 1) +
-  ggtitle(paste0("Momentum and contrarian strategies")) +
+  ggtitle(paste0("Winner and loser strategies")) +
   xlab("Date") +
   scale_y_continuous(trans = 'log2') +
   scale_color_manual(
-    values = c("#F8766D", "#7CAE00", "#000000"))
+    values = c("#7CAE00", "#000000", "#F8766D"))
 
 
