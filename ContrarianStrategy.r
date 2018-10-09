@@ -5,6 +5,7 @@ library(tidyverse) # replace_na function & formatting data
 library(PerformanceAnalytics) # Sharpe ratio and maximum drawdown
 options(scipen = 1000000)
 
+# False to use market capitalization-weighted data, true to use equal weighted data
 use_equal_weighted_data <- F
 
 # Read the data & keep only needed rows (Average value weighted monthly returns)
@@ -13,7 +14,6 @@ if(use_equal_weighted_data){
   rawdata <- rawdata[I(first(grep("Average", rawdata$X)) + 2):
                        I(first(grep("Annual", rawdata$X)) - 1), ]
 } else {rawdata <- rawdata[1:first(grep("Average", rawdata$X)) - 1, ]}
-
 
 # Format dates
 colnames(rawdata)[1] <- "dates"
@@ -165,7 +165,7 @@ returns_holder <- rbind(NA, returns_holder)
 returns_holder[1, 1] <- "Index"
 returns_holder[1, 2] <- exp(mean(log(strategies_holder$index), na.rm = T))^12
 
-# Calculate Sharpe ratios, max drawdowns and volatilities and put them to returns_holder
+# Calculate returns,  Sharpe ratios, max drawdowns, volatilities & information ratios
 returns_holder$Sharpe <- t(unname(SharpeRatio.annualized(strategies_holder_xts, 0.02 / 12)))
 returns_holder$`Max DD` <- t(unname(maxDrawdown(strategies_holder_xts)))
 returns_holder$Volatility <- t(unname(StdDev.annualized(strategies_holder_xts)))
@@ -298,7 +298,7 @@ returns_holder_mc$Strategy <- colnames(returns_df)
 # Make an xts object for holding decimal returns
 returns_xts <- as.xts(returns_df - 1)
 
-# Calculate returns,  Sharpe ratios, max drawdowns & volatilities
+# Calculate returns,  Sharpe ratios, max drawdowns, volatilities & information ratios
 for (i in 1:3) {
   returns_holder_mc$Return[i] <- exp(mean(log(returns_df[, i]), na.rm = T))^12
 }
@@ -320,3 +320,87 @@ ggplot(returns_formatted, aes(x = as.Date(date), y = index, color = Strategy)) +
   ylab("Logarithmic returns") +
   scale_y_continuous(trans = "log2") +
   scale_color_manual(values = c("#7CAE00", "#000000", "#F8766D"))
+
+
+####################
+# Summary statistics
+# Function for plotting excess returns and returning excess returns
+calculate_excess_returns <- function(winner_or_loser){
+  
+  # Put the chosen strategy together with index and calculate excess returns
+  if(winner_or_loser == "Winner"){
+    summary <- returns_df %>% 
+      select(Index, winner_or_loser) %>% 
+      mutate(excess = returns_df[, 2] - returns_df[, 1])} else {
+        summary <- returns_df %>% 
+          select(Index, winner_or_loser) %>% 
+          mutate(excess = returns_df[, 3] - returns_df[, 1])}
+  
+  rownames(summary) <- rownames(returns_df)
+  
+# Summarise average excess returns by month
+monthly <- summary %>% 
+  mutate(month = month.name[month(rownames(.))]) %>% 
+  group_by(month) %>% 
+  summarise(mean(excess))
+
+# Order by month
+monthly <- with(monthly, monthly[order(factor(monthly$month, levels = month.name)), ])
+
+# Plot excess returns by date
+summary$excess <- summary$excess + 1
+print(ggplot(summary, aes(x = as.Date(rownames(summary)), y = excess, group = 1)) +
+  geom_path(stat = "identity"))
+
+# Add columns for each month containing the excess returns
+for(i in 1:12){
+  summary[, i + 3] <- NA
+  colnames(summary)[i + 3] <- i
+  summary[, i + 3] <- lead(summary$excess, i)
+}
+
+# Keep only Januaries
+summary[month(rownames(summary)) != 1, ] <- NA
+
+# Keep only the excess returns
+cumulative_months <- summary %>% 
+  select(4:15)
+return(apply(cumulative_months, 2, function(x) mean(x, na.rm = T)))
+}
+
+# Use the function to calculate excess returns for each strategy
+cumulative_final_winner <- calculate_excess_returns("Winner")
+cumulative_final_loser <- calculate_excess_returns("Loser")
+
+################################
+# Plot cumulative excess returns
+
+# Bind the excess returns anc calculate cumulative excess returns
+winner_loser_cumulative <- cbind(cumulative_final_winner, cumulative_final_loser)
+winner_loser_cumulative <- as.data.frame(apply(winner_loser_cumulative, 2, cumprod))
+
+# Format for plotting
+winner_loser_cumulative$month <- 1:12
+colnames(winner_loser_cumulative) <- c("Winner", "Loser", "Month")
+
+# Gather and format for plotting the cumulatie excess returns
+w_l_formatted <- gather(winner_loser_cumulative, Strategy, value, Winner, Loser) 
+w_l_formatted$Strategy <- factor(w_l_formatted$Strategy,levels = c("Winner", "Loser"))
+
+# Plot
+w_l_formatted %>%
+  ggplot(aes(x = factor(Month), y = value, colour = Strategy, group = Strategy)) +
+  geom_line(size = 1.3) +
+  xlab("Months after portfolio formation") +
+  ylab("Cumulative excess return") +
+  ggtitle("Cumulative excess return after portfolio formation") +
+  scale_color_manual(values = c("#7CAE00", "#F8766D"))
+
+
+
+
+
+
+
+
+
