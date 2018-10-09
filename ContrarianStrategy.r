@@ -5,9 +5,15 @@ library(tidyverse) # replace_na function & formatting data
 library(PerformanceAnalytics) # Sharpe ratio and maximum drawdown
 options(scipen = 1000000)
 
+use_equal_weighted_data <- F
+
 # Read the data & keep only needed rows (Average value weighted monthly returns)
 rawdata <- read.csv("49_Industry_Portfolios.CSV", skip = 11, stringsAsFactors = F)
-rawdata <- rawdata[1:first(grep("Average", rawdata$X)) - 1, ]
+if(use_equal_weighted_data){
+  rawdata <- rawdata[I(first(grep("Average", rawdata$X)) + 2):
+                       I(first(grep("Annual", rawdata$X)) - 1), ]
+} else {rawdata <- rawdata[1:first(grep("Average", rawdata$X)) - 1, ]}
+
 
 # Format dates
 colnames(rawdata)[1] <- "dates"
@@ -127,8 +133,9 @@ for (year in 1:5) {
 }
 
 # Make a data frame for containing returns, Sharpe ratio, max dd and volatility
-returns_holder <- as.data.frame(matrix(nrow = 5 * 5, ncol = 5))
-colnames(returns_holder) <- c("Strategy", "Return", "Sharpe", "Max DD", "Volatility")
+returns_holder <- as.data.frame(matrix(nrow = 5 * 5, ncol = 6))
+colnames(returns_holder) <- c("Strategy", "Return", "Sharpe", "Max DD", "Volatility",
+                              "Information ratio")
 
 # Make a data frame for strategies & add index returns to it
 strategies_holder <- data.frame(matrix(nrow = nrow(returns_ts), ncol = 1))
@@ -162,6 +169,8 @@ returns_holder[1, 2] <- exp(mean(log(strategies_holder$index), na.rm = T))^12
 returns_holder$Sharpe <- t(unname(SharpeRatio.annualized(strategies_holder_xts, 0.02 / 12)))
 returns_holder$`Max DD` <- t(unname(maxDrawdown(strategies_holder_xts)))
 returns_holder$Volatility <- t(unname(StdDev.annualized(strategies_holder_xts)))
+returns_holder$`Information ratio` <- t(unname(InformationRatio(strategies_holder_xts,
+                                                                strategies_holder_xts$index)))
 
 # Make cumulative product calculation for plotting
 strategies_cumprod <- apply(strategies_holder, 2, cumprod)
@@ -174,6 +183,7 @@ ggplot(strategies_formatted, aes(x = as.Date(Date), y = index, color = Strategy)
   geom_line(size = 1) +
   ggtitle(paste0("Strategies formed every month")) +
   xlab("Date") +
+  ylab("Logarithmic returns") +
   scale_y_continuous(trans = "log2") +
   scale_color_manual(
     values = c(
@@ -278,8 +288,9 @@ returns_cumprod <- cumprod(returns_df[, 2:4])
 returns_cumprod$date <- rownames(returns_df)
 
 # Make a data frame for performance metrics
-returns_holder_mc <- as.data.frame(matrix(nrow = 3, ncol = 5))
-colnames(returns_holder_mc) <- c("Strategy", "Return", "Sharpe", "Max DD", "Volatility")
+returns_holder_mc <- as.data.frame(matrix(nrow = 3, ncol = 6))
+colnames(returns_holder_mc) <- c("Strategy", "Return", "Sharpe", "Max DD", "Volatility",
+                                 "Information ratio")
 returns_df <- column_to_rownames(returns_df)
 # Add strategy names
 returns_holder_mc$Strategy <- colnames(returns_df)
@@ -294,6 +305,7 @@ for (i in 1:3) {
 returns_holder_mc$Sharpe <- t(unname(SharpeRatio.annualized(returns_xts, 0.02 / 12)))
 returns_holder_mc$`Max DD` <- t(unname(maxDrawdown(returns_xts)))
 returns_holder_mc$Volatility <- t(unname(StdDev.annualized(returns_xts)))
+returns_holder_mc$`Information ratio` <- t(unname(InformationRatio(returns_xts, returns_xts$Index)))
 
 # Format returns, gather them & plot
 returns_cumprod$date <- rownames(returns_df)
@@ -305,5 +317,6 @@ ggplot(returns_formatted, aes(x = as.Date(date), y = index, color = Strategy)) +
   geom_line(size = 1) +
   ggtitle(paste0("Winner and loser strategies")) +
   xlab("Date") +
+  ylab("Logarithmic returns") +
   scale_y_continuous(trans = "log2") +
   scale_color_manual(values = c("#7CAE00", "#000000", "#F8766D"))
