@@ -1,6 +1,7 @@
 library(Amelia) # missmap
 library(ggplot2) # plotting
 library(lubridate) # handling dates
+library(gridExtra) # Plotting multiple graphs together
 library(tidyverse) # replace_na function & formatting data
 library(PerformanceAnalytics) # Sharpe ratio and maximum drawdown
 options(scipen = 1000000)
@@ -181,7 +182,7 @@ strategies_cumprod$Date <- rownames(strategies_cumprod)
 strategies_formatted <- gather(strategies_cumprod, Strategy, index, -Date)
 ggplot(strategies_formatted, aes(x = as.Date(Date), y = index, color = Strategy)) +
   geom_line(size = 1) +
-  ggtitle(paste0("Strategies formed every month")) +
+  ggtitle(paste0("Contrarian strategies formed every month")) +
   xlab("Date") +
   ylab("Logarithmic returns") +
   scale_y_continuous(trans = "log2") +
@@ -344,13 +345,21 @@ monthly <- summary %>%
   group_by(month) %>% 
   summarise(mean(excess))
 
-# Order by month
-monthly <- with(monthly, monthly[order(factor(monthly$month, levels = month.name)), ])
+# Order by month and assign to variable
+assign(paste0("monthly_excess_", winner_or_loser),
+       with(monthly, monthly[order(factor(monthly$month, levels = month.name)), ]),
+       envir = .GlobalEnv)
+      
 
 # Plot excess returns by date
 summary$excess <- summary$excess + 1
-print(ggplot(summary, aes(x = as.Date(rownames(summary)), y = excess, group = 1)) +
-  geom_path(stat = "identity"))
+assign(paste0("plot_", winner_or_loser), 
+       ggplot(summary, aes(x = as.Date(rownames(summary)), y = excess - 1, group = 1)) +
+       geom_path(stat = "identity") +
+       scale_y_continuous(limits = c(-0.75, 0.75)) +
+       xlab("Date") +
+       ylab("Excess returns") +
+       ggtitle(paste("Excess returns of the", winner_or_loser, "strategy")), envir = .GlobalEnv)
 
 # Add columns for each month containing the excess returns
 for(i in 1:12){
@@ -368,9 +377,10 @@ cumulative_months <- summary %>%
 return(apply(cumulative_months, 2, function(x) mean(x, na.rm = T)))
 }
 
-# Use the function to calculate excess returns for each strategy
+# Use the function to calculate and plot excess returns for each strategy
 cumulative_final_winner <- calculate_excess_returns("Winner")
 cumulative_final_loser <- calculate_excess_returns("Loser")
+grid.arrange(plot_Winner, plot_Loser)
 
 ################################
 # Plot cumulative excess returns
@@ -386,18 +396,24 @@ colnames(winner_loser_cumulative) <- c("Winner", "Loser", "Month")
 # Gather and format for plotting the cumulatie excess returns
 w_l_formatted <- gather(winner_loser_cumulative, Strategy, value, Winner, Loser) 
 w_l_formatted$Strategy <- factor(w_l_formatted$Strategy,levels = c("Winner", "Loser"))
+w_l_formatted$value <- w_l_formatted$value - 1
 
 # Plot
 w_l_formatted %>%
   ggplot(aes(x = factor(Month), y = value, colour = Strategy, group = Strategy)) +
   geom_line(size = 1.3) +
   xlab("Months after portfolio formation") +
-  ylab("Cumulative excess return") +
+  ylab("Average cumulative excess return") +
   ggtitle("Cumulative excess return after portfolio formation") +
-  scale_color_manual(values = c("#7CAE00", "#F8766D"))
+  scale_color_manual(values = c("#7CAE00", "#F8766D")) +
+  geom_hline(yintercept = 0) +
+  scale_y_continuous(limits = c(-0.05, 0.05))
 
-
-
+# View the results of different strategies
+View(returns_holder)
+View(returns_holder_mc)
+View(monthly_excess_Winner)
+View(monthly_excess_Loser)
 
 
 
