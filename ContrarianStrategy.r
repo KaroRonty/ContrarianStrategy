@@ -1,8 +1,10 @@
+library(knitr) # Tables
 library(Amelia) # missmap
 library(ggplot2) # plotting
 library(lubridate) # handling dates
-library(gridExtra) # Plotting multiple graphs together
+library(gridExtra) # plotting multiple graphs together
 library(tidyverse) # replace_na function & formatting data
+library(kableExtra) # HTML tables for the performance metrics
 library(PerformanceAnalytics) # Sharpe ratio and maximum drawdown
 options(scipen = 1000000)
 
@@ -150,7 +152,7 @@ for (i in 1:5) {
     returns_holder[k, 1] <- paste0(i, "_", j)
     returns_holder[k, 2] <- exp(mean(log(get(paste0("strategy_vector", i, "_", j))),
                                      na.rm = T
-    ))^12
+    ))^12 - 1
     strategies_holder <- cbind(strategies_holder, get(paste0("strategy_vector", i, "_", j)))
     colnames(strategies_holder)[k + 1] <- paste0(i, "_", j)
     k <- k + 1
@@ -164,7 +166,7 @@ strategies_holder_xts <- as.xts(strategies_holder - 1)
 # Add the index and its returns to returns_holder
 returns_holder <- rbind(NA, returns_holder)
 returns_holder[1, 1] <- "Index"
-returns_holder[1, 2] <- exp(mean(log(strategies_holder$index), na.rm = T))^12
+returns_holder[1, 2] <- exp(mean(log(strategies_holder$index), na.rm = T))^12 - 1
 
 # Calculate returns,  Sharpe ratios, max drawdowns, volatilities & information ratios
 returns_holder$Sharpe <- t(unname(SharpeRatio.annualized(strategies_holder_xts, 0.02 / 12)))
@@ -185,7 +187,7 @@ ggplot(strategies_formatted, aes(x = as.Date(Date), y = index, color = Strategy)
   ggtitle(paste0("Contrarian strategies formed every month")) +
   xlab("Date") +
   ylab("Logarithmic returns") +
-  scale_y_continuous(trans = "log2") +
+  #cale_y_continuous(trans = "log2") +
   scale_color_manual(
     values = c(
       "#F8766D", "#F8766D", "#F8766D", "#F8766D", "#F8766D"
@@ -301,7 +303,7 @@ returns_xts <- as.xts(returns_df - 1)
 
 # Calculate returns,  Sharpe ratios, max drawdowns, volatilities & information ratios
 for (i in 1:3) {
-  returns_holder_mc$Return[i] <- exp(mean(log(returns_df[, i]), na.rm = T))^12
+  returns_holder_mc$Return[i] <- exp(mean(log(returns_df[, i]), na.rm = T))^12 - 1
 }
 returns_holder_mc$Sharpe <- t(unname(SharpeRatio.annualized(returns_xts, 0.02 / 12)))
 returns_holder_mc$`Max DD` <- t(unname(maxDrawdown(returns_xts)))
@@ -382,6 +384,9 @@ cumulative_final_winner <- calculate_excess_returns("Winner")
 cumulative_final_loser <- calculate_excess_returns("Loser")
 grid.arrange(plot_Winner, plot_Loser)
 
+colnames(monthly_excess_Winner) <- c("Month", "Excess return")
+colnames(monthly_excess_Loser) <- c("Month", "Excess return")
+
 ################################
 # Plot cumulative excess returns
 
@@ -409,14 +414,23 @@ w_l_formatted %>%
   geom_hline(yintercept = 0) +
   scale_y_continuous(limits = c(-0.05, 0.05))
 
+##########################################
 # View the results of different strategies
 View(returns_holder)
 View(returns_holder_mc)
 View(monthly_excess_Winner)
 View(monthly_excess_Loser)
 
+print_table <- function(data){
+  data[-1] <- apply(data[-1], 2, function(x) formatC(x, digits = 3, format = "f"))
+  data %>% 
+    kable() %>% 
+    kable_styling(bootstrap_options = c("striped", "condensed")) %>% 
+    print()
+}
 
-
-
-
+print_table(returns_holder)
+print_table(returns_holder_mc)
+print_table(monthly_excess_Winner)
+print_table(monthly_excess_Loser)
 
