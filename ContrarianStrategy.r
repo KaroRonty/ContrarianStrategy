@@ -23,11 +23,14 @@ colnames(rawdata)[1] <- "dates"
 rawdata$dates <- paste0(rawdata$dates, "01")
 rawdata$dates <- as.Date(rawdata$dates, "%Y%m%d")
 
+# Change to 1947 to exclude period 1926-1947
+rawdata <- rawdata[year(rawdata$dates) > 1925, ]
+
 # Extract dates into a vector & delete them from rawdata
 dates <- rawdata$dates
 rawdata$dates <- NULL
 
-# Remove NAs (-99.99) & make daily returns into decimals
+# Change NAs (-99.99) & make daily returns into decimals
 rawdata <- sapply(rawdata, as.numeric)
 rawdata[which(rawdata == -99.99)] <- NA
 rawdata <- rawdata / 100 + 1
@@ -187,7 +190,7 @@ ggplot(strategies_formatted, aes(x = as.Date(Date), y = index, color = Strategy)
   ggtitle(paste0("Contrarian strategies formed every month")) +
   xlab("Date") +
   ylab("Logarithmic returns") +
-  #cale_y_continuous(trans = "log2") +
+  scale_y_continuous(trans = "log2") +
   scale_color_manual(
     values = c(
       "#F8766D", "#F8766D", "#F8766D", "#F8766D", "#F8766D"
@@ -412,7 +415,7 @@ w_l_formatted %>%
   ggtitle("Cumulative excess return after portfolio formation") +
   scale_color_manual(values = c("#7CAE00", "#F8766D")) +
   geom_hline(yintercept = 0) +
-  scale_y_continuous(limits = c(-0.05, 0.05))
+  scale_y_continuous(limits = c(-0.07, 0.07))
 
 ##########################################
 # View the results of different strategies
@@ -421,6 +424,31 @@ View(returns_holder_mc)
 View(monthly_excess_Winner)
 View(monthly_excess_Loser)
 
+# Plot the contrarian strategy returns and volatilities
+ggplot(returns_holder, aes(x = Volatility, y = Return, color = Strategy)) +
+  geom_point() +
+  scale_y_continuous(limits = c(0.075, 0.16)) +
+  scale_x_continuous(limits = c(0.15, 0.3)) +
+  scale_color_manual(
+    values = c(
+      "#F8766D", "#F8766D", "#F8766D", "#F8766D", "#F8766D"
+      , "#7CAE00", "#7CAE00", "#7CAE00", "#7CAE00", "#7CAE00"
+      , "#00BFC4", "#00BFC4", "#00BFC4", "#00BFC4", "#00BFC4"
+      , "#C77CFF", "#C77CFF", "#C77CFF", "#C77CFF", "#C77CFF"
+      , "#D3D3D3", "#D3D3D3", "#D3D3D3", "#D3D3D3", "#D3D3D3", "#000000"
+    )
+  ) +
+  geom_text_repel(aes(label = Strategy))
+
+# Plot the winner and loser strategy returns and volatilities
+ggplot(returns_holder_mc, aes(x = Volatility, y = Return, color = Strategy)) +
+  geom_point() +
+  scale_y_continuous(limits = c(0.075, 0.16)) +
+  scale_x_continuous(limits = c(0.15, 0.3)) +
+  scale_color_manual(values = c("#000000", "#F8766D", "#7CAE00")) +
+  geom_text_repel(aes(label = Strategy))
+
+# Print HTML tables of performance metrics
 print_table <- function(data){
   data[-1] <- apply(data[-1], 2, function(x) formatC(x, digits = 3, format = "f"))
   data %>% 
