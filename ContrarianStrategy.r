@@ -1,6 +1,7 @@
 library(knitr) # Tables
 library(Amelia) # missmap
 library(ggplot2) # plotting
+library(ggrepel) # ggplot labels
 library(lubridate) # handling dates
 library(gridExtra) # plotting multiple graphs together
 library(tidyverse) # replace_na function & formatting data
@@ -343,43 +344,35 @@ calculate_excess_returns <- function(winner_or_loser){
           mutate(excess = returns_df[, 3] - returns_df[, 1])}
   
   rownames(summary) <- rownames(returns_df)
+    
+  # Summarise average excess returns by month
+  monthly <- summary %>% 
+    mutate(month = month.name[month(rownames(.))]) %>% 
+    group_by(month) %>% 
+    summarise(mean(excess))
   
-# Summarise average excess returns by month
-monthly <- summary %>% 
-  mutate(month = month.name[month(rownames(.))]) %>% 
-  group_by(month) %>% 
-  summarise(mean(excess))
-
-# Order by month and assign to variable
-assign(paste0("monthly_excess_", winner_or_loser),
-       with(monthly, monthly[order(factor(monthly$month, levels = month.name)), ]),
-       envir = .GlobalEnv)
-      
-
-# Plot excess returns by date
-summary$excess <- summary$excess + 1
-assign(paste0("plot_", winner_or_loser), 
-       ggplot(summary, aes(x = as.Date(rownames(summary)), y = excess - 1, group = 1)) +
-       geom_path(stat = "identity") +
-       scale_y_continuous(limits = c(-0.75, 0.75)) +
-       xlab("Date") +
-       ylab("Excess returns") +
-       ggtitle(paste("Excess returns of the", winner_or_loser, "strategy")), envir = .GlobalEnv)
-
-# Add columns for each month containing the excess returns
-for(i in 1:12){
-  summary[, i + 3] <- NA
-  colnames(summary)[i + 3] <- i
-  summary[, i + 3] <- lead(summary$excess, i)
-}
-
-# Keep only Januaries
-summary[month(rownames(summary)) != 1, ] <- NA
-
-# Keep only the excess returns
-cumulative_months <- summary %>% 
-  select(4:15)
-return(apply(cumulative_months, 2, function(x) mean(x, na.rm = T)))
+  # Order by month and assign to variable
+  assign(paste0("monthly_excess_", winner_or_loser),
+         with(monthly, monthly[order(factor(monthly$month, levels = month.name)), ]),
+         envir = .GlobalEnv)
+        
+  
+  # Plot excess returns by date
+  summary$excess <- summary$excess + 1
+  assign(paste0("plot_", winner_or_loser), 
+         ggplot(summary, aes(x = as.Date(rownames(summary)), y = excess - 1, group = 1)) +
+         geom_path(stat = "identity") +
+         scale_y_continuous(limits = c(-0.75, 0.75)) +
+         xlab("Date") +
+         ylab("Excess returns") +
+         ggtitle(paste("Excess returns of the", winner_or_loser, "strategy")), envir = .GlobalEnv)
+  
+  # Make a data frame for cumulative returns 
+  cumulative_months <- as.data.frame(matrix(nrow = 12, ncol = 1))
+  for(i in 1:12){
+    cumulative_months[i, 1] <- mean(summary[month(rownames(summary)) == i, 3])
+  }
+  return(cumulative_months)
 }
 
 # Use the function to calculate and plot excess returns for each strategy
