@@ -9,6 +9,18 @@ library(kableExtra) # HTML tables for the performance metrics
 library(PerformanceAnalytics) # Sharpe ratio and maximum drawdown
 options(scipen = 1000000)
 
+# Read risk free rates for Sharpe ratio calculation, keep only needed rows and format
+riskfree <- read.csv("F-F_Research_Data_Factors.csv", skip = 3, stringsAsFactors = F)
+riskfree <- riskfree[1:I(grep("Annual", riskfree$X) - 2), ]
+colnames(riskfree)[1] <- "dates"
+riskfree$dates <- paste0(riskfree$dates, "01")
+riskfree$dates <- as.Date(riskfree$dates, "%Y%m%d")
+riskfree <- riskfree %>% select(dates, RF)
+riskfree$RF <- as.numeric(riskfree$RF) / 100
+# Add missing risk-free rate
+riskfree <- rbind(riskfree[1,], riskfree)
+riskfree$dates[1] <- riskfree$dates[1] - months(1)
+
 # False to use market capitalization-weighted data, true to use equal weighted data
 use_equal_weighted_data <- F
 
@@ -167,13 +179,25 @@ for (i in 1:5) {
 strategies_holder <- head(strategies_holder, -1)
 strategies_holder_xts <- as.xts(strategies_holder - 1)
 
+# Join risk free returns an convert to time series object for Sharpe ratio calculation
+riskfree_join <- rownames_to_column(as.data.frame(strategies_holder_xts))
+colnames(riskfree_join)[1] <- "dates"
+riskfree_join$dates <- as.Date(riskfree_join$dates)
+rf <- riskfree %>% 
+  inner_join(riskfree_join) %>% 
+  select(dates, RF)
+rownames(rf) <- rf$dates
+rf$dates <- NULL
+rf <- as.xts(rf)
+
+
 # Add the index and its returns to returns_holder
 returns_holder <- rbind(NA, returns_holder)
 returns_holder[1, 1] <- "Index"
 returns_holder[1, 2] <- exp(mean(log(strategies_holder$index), na.rm = T))^12 - 1
 
 # Calculate returns,  Sharpe ratios, max drawdowns, volatilities & information ratios
-returns_holder$Sharpe <- t(unname(SharpeRatio.annualized(strategies_holder_xts, 0.02 / 12)))
+returns_holder$Sharpe <- t(unname(SharpeRatio.annualized(strategies_holder_xts, rf)))
 returns_holder$`Max DD` <- t(unname(maxDrawdown(strategies_holder_xts)))
 returns_holder$Volatility <- t(unname(StdDev.annualized(strategies_holder_xts)))
 returns_holder$`Information ratio` <- t(unname(InformationRatio(strategies_holder_xts,
@@ -305,11 +329,22 @@ returns_holder_mc$Strategy <- colnames(returns_df)
 # Make an xts object for holding decimal returns
 returns_xts <- as.xts(returns_df - 1)
 
+# Join risk free returns an convert to time series object for Sharpe ratio calculation
+riskfree_join_wl <- rownames_to_column(as.data.frame(returns_xts))
+colnames(riskfree_join_wl)[1] <- "dates"
+riskfree_join_wl$dates <- as.Date(riskfree_join_wl$dates)
+rf_wl <- riskfree %>% 
+  inner_join(riskfree_join_wl) %>% 
+  select(dates, RF)
+rownames(rf_wl) <- rf_wl$dates
+rf_wl$dates <- NULL
+rf_wl <- as.xts(rf_wl)
+
 # Calculate returns,  Sharpe ratios, max drawdowns, volatilities & information ratios
 for (i in 1:3) {
   returns_holder_mc$Return[i] <- exp(mean(log(returns_df[, i]), na.rm = T))^12 - 1
 }
-returns_holder_mc$Sharpe <- t(unname(SharpeRatio.annualized(returns_xts, 0.02 / 12)))
+returns_holder_mc$Sharpe <- t(unname(SharpeRatio.annualized(returns_xts, rf_wl)))
 returns_holder_mc$`Max DD` <- t(unname(maxDrawdown(returns_xts)))
 returns_holder_mc$Volatility <- t(unname(StdDev.annualized(returns_xts)))
 returns_holder_mc$`Information ratio` <- t(unname(InformationRatio(returns_xts, returns_xts$Index)))
