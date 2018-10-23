@@ -228,6 +228,47 @@ ggplot(strategies_formatted, aes(x = as.Date(Date), y = index, color = Strategy)
 
 #############################
 # Winner and loser strategies
+
+# Function for calculating cumulative strategy returns
+calculate_returns <- function(temp_returns) {
+  # Make an empty data frame for containing returns
+  strategy <- as.data.frame(matrix(nrow = nrow(temp_returns), ncol = 1))
+  rownames(strategy) <- rownames(temp_returns)
+  colnames(strategy) <- "strategy"
+  
+  # Add the returns of the first year to data frame
+  Jan <- NA
+  # Keep only returns of a single year at a time
+  one_year <- temp_returns[1:12, ] %>% t() %>% na.omit() %>% t()
+  # Add the first month
+  Jan <- 1 / ncol(one_year) * one_year[1, ]
+  # Calculate the first month
+  strategy[1, 1] <- sum(Jan)
+  # Calculate rest of the months
+  for (i in 2:12) {
+    assign(month.abb[i], get(month.abb[i - 1]) * one_year[i, ])
+    strategy[i, 1] <- sum(get(month.abb[i]))
+  }
+  previous_return <- sum(Dec)
+  
+  
+  # Add the rest of the returns to the return data frame
+  for (i in 2:I(nrow(temp_returns) / 12)) {
+    # Keep one year at a time
+    one_year <- temp_returns[I(i * 12 - 11):I(i * 12), ] %>% t() %>% na.omit() %>% t()
+    # Calculate the first month
+    Jan <- previous_return / ncol(one_year) * one_year[1, ]
+    strategy[I(i * 12 - 11), 1] <- sum(Jan)
+    # Calculate rest of the months
+    for (j in 2:12) {
+      assign(month.abb[j], get(month.abb[j - 1]) * one_year[j, ])
+      strategy[I(i * 12 - 12 + j), 1] <- sum(get(month.abb[j]))
+    }
+    previous_return <- sum(Dec)
+  }
+  strategy <- as.data.frame(strategy / lag(strategy$strategy, 1))
+  strategy
+}
 #################
 # Winner strategy
 
@@ -258,10 +299,11 @@ for (c in 1:ncol(momentum_ts)) {
   }
 }
 
-# Mean return of each month
-Winner <- apply(temp, 1, function(x) mean(x, na.rm = T))
-# Remove NAs from the latest years where the strategy was not invested
-Winner <- Winner[!is.na(Winner)]
+# Make a data frame for containing returns and calculate returns
+temp_returns <- temp[rowSums(is.na(temp)) != ncol(temp), ]
+Winner <- calculate_returns(temp_returns)
+colnames(Winner) <- "Winner"
+
 # Join index and momentum strategy returns together
 returns_df <- inner_join(
   rownames_to_column(as.data.frame(index_vector)),
@@ -296,12 +338,12 @@ for (c in 1:ncol(contra_ts)) {
     }
   }
 }
-# Delete months before the first January when the strategy was not invested
-temp2 <- temp2[I(month(rownames(temp2))[1] + 2):nrow(temp2), ]
-# Mean return of each month
-Loser <- apply(temp2, 1, function(x) mean(x, na.rm = T))
-# Remove NAs from the latest years where the strategy was not invested
-Loser <- Loser[!is.na(Loser)]
+
+# Make a data frame for containing returns and calculate returns
+temp_returns2 <- temp2[rowSums(is.na(temp2)) != ncol(temp2), ]
+Loser <- calculate_returns(temp_returns2)
+colnames(Loser) <- "Loser"
+Loser <- na.omit(Loser)
 
 ##############
 
