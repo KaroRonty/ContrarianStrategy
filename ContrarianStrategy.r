@@ -1,4 +1,4 @@
-library(knitr) # Tables
+library(knitr) # tables
 library(Amelia) # missmap
 library(ggplot2) # plotting
 library(ggrepel) # ggplot labels
@@ -7,6 +7,7 @@ library(gridExtra) # plotting multiple graphs together
 library(tidyverse) # replace_na function & formatting data
 library(kableExtra) # HTML tables for the performance metrics
 library(PerformanceAnalytics) # Sharpe ratio and maximum drawdown
+load("Sharpe.RData") # Load the workspace for caluclating p-values
 options(scipen = 1000000)
 
 # Read risk free rates for Sharpe ratio calculation, keep only needed rows and format
@@ -519,16 +520,44 @@ ggplot(returns_holder_mc, aes(x = Volatility, y = Return, color = Strategy)) +
   geom_text_repel(aes(label = Strategy))
 
 # Print HTML tables of performance metrics
-print_table <- function(data){
+print_table <- function(data, format = T){
+  if(format){
   data[-1] <- apply(data[-1], 2, function(x) formatC(x, digits = 3, format = "f"))
+  } else {data <- apply(data, 2, function(x) formatC(x, digits = 3, format = "f"))}
   data %>% 
     kable() %>% 
     kable_styling(bootstrap_options = c("striped", "condensed")) %>% 
     print()
 }
 
+################################################
+# Test for Sharpe ratio statistical significance
+
+# Make a data frame for p-values of the contrarian strategies
+pvalue_holder <- as.data.frame(matrix(nrow = 25, ncol = 1))
+rownames(pvalue_holder) <- colnames(strategies_holder)[-1]
+colnames(pvalue_holder) <- "P-value"
+
+# Loop the p-values into the data frame
+for(i in 1:I(ncol(strategies_holder) - 1)){
+  pvalue_holder[i, 1] <- unname(first(hac.inference(cbind(strategies_holder$index,
+                                                          strategies_holder[, i + 1]))$p.Values))
+}
+
+
+# Make a data frame for p-values of the winner and loser strategies
+pvalue_holder_wl <- as.data.frame(matrix(nrow = 2, ncol = 1))
+rownames(pvalue_holder_wl) <- c("Winner", "Loser")
+colnames(pvalue_holder_wl) <- "P-value"
+# Add the p-values into the data frame
+pvalue_holder_wl[1, 1] <- unname(first(hac.inference(cbind(returns_df$Index,
+                                                              returns_df$Winner))$p.Values))
+pvalue_holder_wl[2, 1] <- unname(first(hac.inference(cbind(returns_df$Index,
+                                                              returns_df$Loser))$p.Values))
+
 print_table(returns_holder)
 print_table(returns_holder_mc)
 print_table(monthly_excess_Winner)
 print_table(monthly_excess_Loser)
-
+print_table(pvalue_holder, F)
+print_table(pvalue_holder_wl, F)
