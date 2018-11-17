@@ -201,8 +201,16 @@ returns_holder[1, 2] <- exp(mean(log(strategies_holder$index), na.rm = T))^12 - 
 returns_holder$Sharpe <- t(unname(SharpeRatio.annualized(strategies_holder_xts, rf)))
 returns_holder$`Max DD` <- t(unname(maxDrawdown(strategies_holder_xts)))
 returns_holder$Volatility <- t(unname(StdDev.annualized(strategies_holder_xts)))
-returns_holder$`Information ratio` <- t(unname(InformationRatio(strategies_holder_xts,
-                                                                strategies_holder_xts$index)))
+returns_holder$`Information ratio` <- t(unname(ifelse(ActivePremium(strategies_holder_xts,
+                                                                    strategies_holder_xts$index) < 0,
+                                                      ActivePremium(strategies_holder_xts,
+                                                                    strategies_holder_xts$index) *
+                                                        TrackingError(strategies_holder_xts,
+                                                                      strategies_holder_xts$index),
+                                                      ActivePremium(strategies_holder_xts,
+                                                                    strategies_holder_xts$index) /
+                                                        TrackingError(strategies_holder_xts,
+                                                                      strategies_holder_xts$index))))
 
 # Make cumulative product calculation for plotting
 strategies_cumprod <- apply(strategies_holder, 2, cumprod)
@@ -390,7 +398,16 @@ for (i in 1:3) {
 returns_holder_mc$Sharpe <- t(unname(SharpeRatio.annualized(returns_xts, rf_wl)))
 returns_holder_mc$`Max DD` <- t(unname(maxDrawdown(returns_xts)))
 returns_holder_mc$Volatility <- t(unname(StdDev.annualized(returns_xts)))
-returns_holder_mc$`Information ratio` <- t(unname(InformationRatio(returns_xts, returns_xts$Index)))
+returns_holder_mc$`Information ratio` <- t(unname(ifelse(ActivePremium(returns_xts,
+                                                                       returns_xts$Index) < 0,
+                                                         ActivePremium(returns_xts,
+                                                                       returns_xts$Index) *
+                                                           TrackingError(returns_xts,
+                                                                         returns_xts$Index),
+                                                         ActivePremium(returns_xts,
+                                                                       returns_xts$Index) /
+                                                           TrackingError(returns_xts,
+                                                                         returns_xts$Index))))
 
 # Format returns, gather them & plot
 returns_cumprod$date <- rownames(returns_df)
@@ -554,10 +571,26 @@ pvalue_holder_wl[1, 1] <- unname(first(hac.inference(cbind(returns_df$Index,
                                                               returns_df$Winner))$p.Values))
 pvalue_holder_wl[2, 1] <- unname(first(hac.inference(cbind(returns_df$Index,
                                                               returns_df$Loser))$p.Values))
-
+# Print the different tables as HTML
 print_table(returns_holder)
 print_table(returns_holder_mc)
 print_table(monthly_excess_Winner)
 print_table(monthly_excess_Loser)
 print_table(pvalue_holder, F)
 print_table(pvalue_holder_wl, F)
+
+# Function for printing the complete table
+print_together <- function(returns_holder, pvalue_holder){
+  pvalue_temp <- rownames_to_column(pvalue_holder)
+  colnames(pvalue_temp)[1] <- "Strategy"
+  returns_holder[-1] <- apply(returns_holder[-1], 2, function(x) formatC(x, digits = 3, format = "f"))
+  temp_table <- left_join(returns_holder, pvalue_temp)
+  temp_table %>%
+    kable() %>% 
+    kable_styling(bootstrap_options = c("striped", "condensed")) %>% 
+    print()
+}
+
+# Print complete tables including p-values
+print_together(returns_holder, pvalue_holder)
+print_together(returns_holder_mc, pvalue_holder_wl)
